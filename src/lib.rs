@@ -1,6 +1,9 @@
 #![feature(portable_simd)]
 
-use std::simd::{Simd, SimdPartialEq};
+use std::{
+    mem::transmute,
+    simd::{Simd, SimdPartialEq},
+};
 
 pub struct FastSplitIter<'a> {
     s: &'a [u8],
@@ -48,17 +51,58 @@ fn segment_len(s: &[u8], splt: u8) -> usize {
         .filter(|(_, s)| s.simd_eq(Simd::splat(splt)).any())
         .next()
     {
-        h.len()
-            + l * N
-            + unsafe {
-                s.as_array()
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, &c)| c == splt)
-                    .next()
-                    .unwrap_unchecked()
-                    .0
-            }
+        let mut off = h.len() + l * N;
+
+        let [h, t]: [Simd<u8, 32>; 2] = unsafe { transmute(*s) };
+
+        let s = if h.simd_eq(Simd::splat(splt)).any() {
+            h
+        } else {
+            off += 32;
+            t
+        };
+
+        let [h, t]: [Simd<u8, 16>; 2] = unsafe { transmute(s) };
+
+        let s = if h.simd_eq(Simd::splat(splt)).any() {
+            h
+        } else {
+            off += 16;
+            t
+        };
+
+        let [h, t]: [Simd<u8, 8>; 2] = unsafe { transmute(s) };
+
+        let s = if h.simd_eq(Simd::splat(splt)).any() {
+            h
+        } else {
+            off += 8;
+            t
+        };
+
+        let [h, t]: [Simd<u8, 4>; 2] = unsafe { transmute(s) };
+
+        let s = if h.simd_eq(Simd::splat(splt)).any() {
+            h
+        } else {
+            off += 4;
+            t
+        };
+
+        let [h, t]: [Simd<u8, 2>; 2] = unsafe { transmute(s) };
+
+        let s = if h.simd_eq(Simd::splat(splt)).any() {
+            h
+        } else {
+            off += 2;
+            t
+        };
+
+        if s.as_array()[0] != splt {
+            off += 1;
+        }
+
+        off
     } else if let Some((l, _)) =
         t.iter().enumerate().filter(|(_, &c)| c == splt).next()
     {
@@ -92,7 +136,7 @@ mod tests {
         for s in s.fast_split(b',') {
             let s = from_utf8(s).unwrap();
 
-            println!("{s}");
+            println!("s: {s}");
         }
     }
 }
