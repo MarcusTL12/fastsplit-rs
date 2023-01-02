@@ -1,8 +1,10 @@
-#![feature(portable_simd)]
+#![allow(incomplete_features)]
+#![feature(portable_simd, slice_as_chunks, generic_const_exprs)]
 
 use std::{
     mem::transmute,
-    simd::{Simd, SimdPartialEq},
+    ops::Not,
+    simd::{LaneCount, Simd, SimdPartialEq, SupportedLaneCount},
 };
 
 pub struct FastSplitIter<'a> {
@@ -32,6 +34,84 @@ impl<'a> Iterator for FastSplitIter<'a> {
             Some(h)
         }
     }
+}
+
+#[inline(always)]
+fn segment_len_2(s: Simd<u8, 2>, c: u8) -> Option<usize> {
+    s.simd_eq(Simd::splat(c)).any().then(|| {
+        let [h, _] = s.to_array();
+
+        if h == c {
+            0
+        } else {
+            1
+        }
+    })
+}
+
+#[inline(always)]
+fn segment_len_4(s: Simd<u8, 4>, c: u8) -> Option<usize> {
+    s.simd_eq(Simd::splat(c)).any().then(|| {
+        let [h, t]: [Simd<u8, 2>; 2] = unsafe { transmute(s) };
+
+        unsafe {
+            segment_len_2(h, c)
+                .or_else(|| Some(2 + segment_len_2(t, c).unwrap_unchecked()))
+                .unwrap_unchecked()
+        }
+    })
+}
+
+#[inline(always)]
+fn segment_len_8(s: Simd<u8, 8>, c: u8) -> Option<usize> {
+    s.simd_eq(Simd::splat(c)).any().then(|| {
+        let [h, t]: [Simd<u8, 4>; 2] = unsafe { transmute(s) };
+
+        unsafe {
+            segment_len_4(h, c)
+                .or_else(|| Some(4 + segment_len_4(t, c).unwrap_unchecked()))
+                .unwrap_unchecked()
+        }
+    })
+}
+
+#[inline(always)]
+fn segment_len_16(s: Simd<u8, 16>, c: u8) -> Option<usize> {
+    s.simd_eq(Simd::splat(c)).any().then(|| {
+        let [h, t]: [Simd<u8, 8>; 2] = unsafe { transmute(s) };
+
+        unsafe {
+            segment_len_8(h, c)
+                .or_else(|| Some(8 + segment_len_8(t, c).unwrap_unchecked()))
+                .unwrap_unchecked()
+        }
+    })
+}
+
+#[inline(always)]
+fn segment_len_32(s: Simd<u8, 32>, c: u8) -> Option<usize> {
+    s.simd_eq(Simd::splat(c)).any().then(|| {
+        let [h, t]: [Simd<u8, 16>; 2] = unsafe { transmute(s) };
+
+        unsafe {
+            segment_len_16(h, c)
+                .or_else(|| Some(16 + segment_len_16(t, c).unwrap_unchecked()))
+                .unwrap_unchecked()
+        }
+    })
+}
+
+#[inline(always)]
+fn segment_len_64(s: Simd<u8, 64>, c: u8) -> Option<usize> {
+    s.simd_eq(Simd::splat(c)).any().then(|| {
+        let [h, t]: [Simd<u8, 32>; 2] = unsafe { transmute(s) };
+
+        unsafe {
+            segment_len_32(h, c)
+                .or_else(|| Some(32 + segment_len_32(t, c).unwrap_unchecked()))
+                .unwrap_unchecked()
+        }
+    })
 }
 
 fn segment_len(s: &[u8], splt: u8) -> usize {
