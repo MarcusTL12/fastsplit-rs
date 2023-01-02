@@ -127,10 +127,9 @@ fn segment_len(s: &[u8], splt: u8) -> usize {
     } else if let Some(l) = s
         .iter()
         .enumerate()
-        .filter_map(|(i, s)| {
+        .find_map(|(i, s)| {
             segment_len_64(*s, splt).and_then(|l| Some(l + i * N))
         })
-        .next()
     {
         l
     } else if let Some((l, _)) =
