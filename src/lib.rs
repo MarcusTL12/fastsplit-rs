@@ -2,18 +2,18 @@
 
 use std::simd::{Simd, SimdPartialEq};
 
-pub struct FastSplit<'a> {
+pub struct FastSplitIter<'a> {
     s: &'a [u8],
     c: u8,
 }
 
-impl<'a> FastSplit<'a> {
+impl<'a> FastSplitIter<'a> {
     pub fn new(s: &'a [u8], c: u8) -> Self {
         Self { s, c }
     }
 }
 
-impl<'a> Iterator for FastSplit<'a> {
+impl<'a> Iterator for FastSplitIter<'a> {
     type Item = &'a [u8];
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -68,6 +68,16 @@ fn segment_len(s: &[u8], splt: u8) -> usize {
     }
 }
 
+pub trait FastSplit {
+    fn fast_split(&self, c: u8) -> FastSplitIter;
+}
+
+impl FastSplit for &[u8] {
+    fn fast_split(&self, c: u8) -> FastSplitIter {
+        FastSplitIter::new(self, c)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::from_utf8;
@@ -76,10 +86,10 @@ mod tests {
 
     #[test]
     fn it_works() {
-        let s = "314159265 1234578976543234567 12352352";
+        let s = "314159265,1234578976543234567,12352352";
         let s = s.as_bytes();
 
-        for s in FastSplit::new(s, b' ') {
+        for s in s.fast_split(b',') {
             let s = from_utf8(s).unwrap();
 
             println!("{s}");
