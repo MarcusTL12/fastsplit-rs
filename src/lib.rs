@@ -3,8 +3,7 @@
 
 use std::{
     mem::transmute,
-    ops::Not,
-    simd::{LaneCount, Simd, SimdPartialEq, SupportedLaneCount},
+    simd::{Simd, SimdPartialEq},
 };
 
 pub struct FastSplitIter<'a> {
@@ -125,64 +124,15 @@ fn segment_len(s: &[u8], splt: u8) -> usize {
         h.iter().enumerate().filter(|(_, &c)| c == splt).next()
     {
         l
-    } else if let Some((l, s)) = s
+    } else if let Some(l) = s
         .iter()
         .enumerate()
-        .filter(|(_, s)| s.simd_eq(Simd::splat(splt)).any())
+        .filter_map(|(i, s)| {
+            segment_len_64(*s, splt).and_then(|l| Some(l + i * N))
+        })
         .next()
     {
-        let mut off = h.len() + l * N;
-
-        let [h, t]: [Simd<u8, 32>; 2] = unsafe { transmute(*s) };
-
-        let s = if h.simd_eq(Simd::splat(splt)).any() {
-            h
-        } else {
-            off += 32;
-            t
-        };
-
-        let [h, t]: [Simd<u8, 16>; 2] = unsafe { transmute(s) };
-
-        let s = if h.simd_eq(Simd::splat(splt)).any() {
-            h
-        } else {
-            off += 16;
-            t
-        };
-
-        let [h, t]: [Simd<u8, 8>; 2] = unsafe { transmute(s) };
-
-        let s = if h.simd_eq(Simd::splat(splt)).any() {
-            h
-        } else {
-            off += 8;
-            t
-        };
-
-        let [h, t]: [Simd<u8, 4>; 2] = unsafe { transmute(s) };
-
-        let s = if h.simd_eq(Simd::splat(splt)).any() {
-            h
-        } else {
-            off += 4;
-            t
-        };
-
-        let [h, t]: [Simd<u8, 2>; 2] = unsafe { transmute(s) };
-
-        let s = if h.simd_eq(Simd::splat(splt)).any() {
-            h
-        } else {
-            off += 2;
-            t
-        };
-
-        if s.as_array()[0] != splt {
-            off += 1;
-        }
-
-        off
+        l
     } else if let Some((l, _)) =
         t.iter().enumerate().filter(|(_, &c)| c == splt).next()
     {
