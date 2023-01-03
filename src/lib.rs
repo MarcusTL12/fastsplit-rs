@@ -144,7 +144,7 @@ fn segment_len_sub_32(s: &[u8], c: u8) -> Option<usize> {
 
         segment_len_16(Simd::from(*s), c).or_else(|| segment_len_sub_16(r, c))
     } else {
-        segment_len_sub_8(s, c)
+        segment_len_sub_16(s, c)
     }
 }
 
@@ -154,7 +154,7 @@ fn segment_len_sub_64(s: &[u8], c: u8) -> Option<usize> {
 
         segment_len_32(Simd::from(*s), c).or_else(|| segment_len_sub_32(r, c))
     } else {
-        segment_len_sub_8(s, c)
+        segment_len_sub_32(s, c)
     }
 }
 
