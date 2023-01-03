@@ -1,4 +1,4 @@
-#![feature(portable_simd)]
+#![feature(portable_simd, slice_as_chunks)]
 
 use std::{
     mem::transmute,
@@ -20,14 +20,14 @@ impl<'a> Iterator for FastSplitIter<'a> {
     type Item = &'a [u8];
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.s.len() == 0 {
+        if self.s.is_empty() {
             None
         } else {
             let l = segment_len(self.s, self.c);
 
             let (h, t) = self.s.split_at(l);
 
-            self.s = if t.len() != 0 { &t[1..] } else { t };
+            self.s = if t.is_empty() { t } else { &t[1..] };
 
             Some(h)
         }
@@ -117,24 +117,22 @@ fn segment_len(s: &[u8], splt: u8) -> usize {
 
     let totlen = s.len();
 
-    let (h, s, t) = s.as_simd::<N>();
+    let (s, r) = s.as_chunks::<N>();
 
-    if let Some((l, _)) =
-        h.iter().enumerate().filter(|(_, &c)| c == splt).next()
-    {
-        l
-    } else if let Some(l) = s
+    if let Some(l) = s
         .iter()
+        .cloned()
+        .map(Simd::from)
         .enumerate()
         .find_map(|(i, s)| {
-            segment_len_64(*s, splt).and_then(|l| Some(l + i * N))
+            segment_len_64(s, splt).and_then(|l| Some(l + i * N))
         })
     {
         l
     } else if let Some((l, _)) =
-        t.iter().enumerate().filter(|(_, &c)| c == splt).next()
+        r.iter().enumerate().filter(|(_, &c)| c == splt).next()
     {
-        h.len() + s.len() * N + l
+        s.len() * N + l
     } else {
         totlen
     }
