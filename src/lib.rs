@@ -149,10 +149,10 @@ fn segment_len_sub_32(s: &[u8], c: u8) -> Option<usize> {
 }
 
 fn segment_len_sub_64(s: &[u8], c: u8) -> Option<usize> {
-    if s.len() >= 16 {
-        let (s, r) = s.split_array_ref::<16>();
+    if s.len() >= 32 {
+        let (s, r) = s.split_array_ref::<32>();
 
-        segment_len_16(Simd::from(*s), c).or_else(|| segment_len_sub_16(r, c))
+        segment_len_32(Simd::from(*s), c).or_else(|| segment_len_sub_32(r, c))
     } else {
         segment_len_sub_8(s, c)
     }
