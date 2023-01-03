@@ -1,4 +1,4 @@
-#![feature(portable_simd, slice_as_chunks)]
+#![feature(portable_simd, slice_as_chunks, split_array)]
 
 use std::{
     mem::transmute,
@@ -112,27 +112,71 @@ fn segment_len_64(s: Simd<u8, 64>, c: u8) -> Option<usize> {
     })
 }
 
-fn segment_len(s: &[u8], splt: u8) -> usize {
+fn segment_len_sub_4(s: &[u8], c: u8) -> Option<usize> {
+    s.iter()
+        .enumerate()
+        .find_map(|(i, &x)| (x == c).then_some(i))
+}
+
+fn segment_len_sub_8(s: &[u8], c: u8) -> Option<usize> {
+    if s.len() >= 4 {
+        let (s, r) = s.split_array_ref::<4>();
+
+        segment_len_4(Simd::from(*s), c).or_else(|| segment_len_sub_4(r, c))
+    } else {
+        segment_len_sub_4(s, c)
+    }
+}
+
+fn segment_len_sub_16(s: &[u8], c: u8) -> Option<usize> {
+    if s.len() >= 8 {
+        let (s, r) = s.split_array_ref::<8>();
+
+        segment_len_8(Simd::from(*s), c).or_else(|| segment_len_sub_8(r, c))
+    } else {
+        segment_len_sub_8(s, c)
+    }
+}
+
+fn segment_len_sub_32(s: &[u8], c: u8) -> Option<usize> {
+    if s.len() >= 16 {
+        let (s, r) = s.split_array_ref::<16>();
+
+        segment_len_16(Simd::from(*s), c).or_else(|| segment_len_sub_16(r, c))
+    } else {
+        segment_len_sub_8(s, c)
+    }
+}
+
+fn segment_len_sub_64(s: &[u8], c: u8) -> Option<usize> {
+    if s.len() >= 16 {
+        let (s, r) = s.split_array_ref::<16>();
+
+        segment_len_16(Simd::from(*s), c).or_else(|| segment_len_sub_16(r, c))
+    } else {
+        segment_len_sub_8(s, c)
+    }
+}
+
+fn segment_len(s: &[u8], c: u8) -> usize {
     const N: usize = 64;
 
     let totlen = s.len();
 
     let (s, r) = s.as_chunks::<N>();
 
-    if let Some(l) = s
-        .iter()
-        .cloned()
-        .map(Simd::from)
-        .enumerate()
-        .find_map(|(i, s)| {
-            segment_len_64(s, splt).and_then(|l| Some(l + i * N))
-        })
+    if let Some(l) =
+        s.iter()
+            .cloned()
+            .map(Simd::from)
+            .enumerate()
+            .find_map(|(i, s)| {
+                segment_len_64(s, c).and_then(|l| Some(l + i * N))
+            })
     {
         l
-    } else if let Some((l, _)) =
-        r.iter().enumerate().filter(|(_, &c)| c == splt).next()
-    {
-        s.len() * N + l
+    } else if let Some(l) = segment_len_sub_64(r, c) {
+        N * s.len() + l
     } else {
         totlen
     }
